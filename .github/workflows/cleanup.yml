@@ -1,0 +1,14 @@
+name: 7-Day Data Cleanup
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger cleanup endpoint
+        run: |
+          curl -X POST "${{ secrets.API_URL }}/api/v1/cleanup" \
+            -H "Authorization: Bearer ${{ secrets.CLEANUP_SECRET }}" \
+            -H "Content-Type: application/json"

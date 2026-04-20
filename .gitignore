@@ -1,0 +1,15 @@
+.env
+.env.local
+.env.production
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
+.next/
+out/
+dist/
+build/
+*.spec
+.DS_Store
+Thumbs.db
