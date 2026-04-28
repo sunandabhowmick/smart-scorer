@@ -1,8 +1,9 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { ScoreResult } from '@/lib/types'
-import { ChevronDown, ChevronUp, Trash2, Download } from 'lucide-react'
+import { ChevronDown, ChevronUp, Trash2, Download, Copy, Image } from 'lucide-react'
 import { downloadScorecard } from '@/lib/scorecard-pdf'
+import { captureScorecard } from '@/lib/capture-scorecard'
 
 interface Props {
   result: ScoreResult
@@ -24,6 +25,24 @@ const CAT_ICONS: Record<string, string> = {
   education:  '🎓',
   soft_skills:'🤝',
   stability:  '📊',
+}
+
+const REC_CONFIG: Record<string, { label: string; cls: string; borderCls: string }> = {
+  SHORTLIST: {
+    label: '✅ Shortlist',
+    cls: 'bg-green-100 text-green-800 border-green-200',
+    borderCls: 'border-green-200'
+  },
+  REVIEW: {
+    label: '⚠️ Review',
+    cls: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    borderCls: 'border-yellow-200'
+  },
+  PASS: {
+    label: '❌ Not Suitable',
+    cls: 'bg-red-100 text-red-800 border-red-200',
+    borderCls: 'border-gray-200'
+  },
 }
 
 function ScoreBar({ score, color }: { score: number; color: string }) {
@@ -48,33 +67,41 @@ function getScoreStyle(score: number) {
   return 'border-red-400 text-red-700 bg-red-50'
 }
 
-function RecBadge({ rec }: { rec: string }) {
-  const cfg: Record<string, { cls: string; label: string }> = {
-    SHORTLIST: { cls: 'bg-green-100 text-green-800 border-green-200',  label: '✅ Shortlist' },
-    REVIEW:    { cls: 'bg-yellow-100 text-yellow-800 border-yellow-200', label: '⚠️ Review' },
-    PASS:      { cls: 'bg-red-100 text-red-800 border-red-200',        label: '❌ Pass' },
-  }
-  const { cls, label } = cfg[rec] || cfg.PASS
-  return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${cls}`}>
-      {label}
-    </span>
-  )
-}
-
 export default function ScoreCard({ result, rank, onDelete }: Props) {
   const [expanded, setExpanded] = useState(false)
+  const [copying, setCopying] = useState(false)
+  const [copyDone, setCopyDone] = useState(false)
+  const detailRef = useRef<HTMLDivElement>(null)
+
   const candidate = result.candidates || {}
   const cats = result.category_scores || {}
+  const rec = result.recommendation || 'PASS'
+  const recConfig = REC_CONFIG[rec] || REC_CONFIG.PASS
+
+  // ── Copy as Image ──────────────────────────────────────────────────────────
+  const handleCopyAsImage = async () => {
+    if (!detailRef.current) return
+    setCopying(true)
+    try {
+      await captureScorecard(
+        detailRef.current,
+        (candidate as any).name || 'candidate'
+      )
+      setCopyDone(true)
+      setTimeout(() => setCopyDone(false), 3000)
+    } catch (err) {
+      console.error('Image capture failed:', err)
+    } finally {
+      setCopying(false)
+    }
+  }
 
   return (
-    <div className={`bg-white rounded-xl border-2 overflow-hidden transition-shadow hover:shadow-md ${
-      result.recommendation === 'SHORTLIST' ? 'border-green-200' :
-      result.recommendation === 'REVIEW'    ? 'border-yellow-200' : 'border-gray-200'
-    }`}>
+    <div className={`bg-white rounded-xl border-2 overflow-hidden transition-shadow hover:shadow-md ${recConfig.borderCls}`}>
 
       {/* Summary Row */}
-      <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition"
+      <div
+        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition"
         onClick={() => setExpanded(!expanded)}>
 
         {/* Rank */}
@@ -99,7 +126,9 @@ export default function ScoreCard({ result, rank, onDelete }: Props) {
         </div>
 
         {/* Rec badge */}
-        <RecBadge rec={result.recommendation} />
+        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${recConfig.cls}`}>
+          {recConfig.label}
+        </span>
 
         {/* Mini bars */}
         <div className="hidden lg:flex flex-col gap-1 w-36 shrink-0">
@@ -116,20 +145,18 @@ export default function ScoreCard({ result, rank, onDelete }: Props) {
           ))}
         </div>
 
-        {/* Action buttons */}
+        {/* Actions */}
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={e => { e.stopPropagation(); downloadScorecard(result) }}
             className="text-blue-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition"
-            title="Download Scorecard"
-          >
+            title="Download PDF Scorecard">
             <Download size={15} />
           </button>
           <button
             onClick={e => { e.stopPropagation(); onDelete(result.id) }}
             className="text-red-300 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition"
-            title="Delete"
-          >
+            title="Delete">
             <Trash2 size={15} />
           </button>
           <div className="text-gray-300 ml-1">
@@ -138,11 +165,11 @@ export default function ScoreCard({ result, rank, onDelete }: Props) {
         </div>
       </div>
 
-      {/* Expanded */}
+      {/* Expanded Detail */}
       {expanded && (
         <div className="border-t-2 border-dashed border-gray-100 bg-gray-50">
 
-          {/* Contact */}
+          {/* Contact bar */}
           <div className="flex items-center gap-6 px-6 py-3 bg-white border-b border-gray-100 text-sm text-gray-500">
             {(candidate as any).email && <span>📧 {(candidate as any).email}</span>}
             {(candidate as any).phone && <span>📞 {(candidate as any).phone}</span>}
@@ -151,7 +178,8 @@ export default function ScoreCard({ result, rank, onDelete }: Props) {
             </span>
           </div>
 
-          <div className="px-6 py-5 space-y-5">
+          {/* Capturable scorecard area */}
+          <div ref={detailRef} className="px-6 py-5 space-y-5 bg-gray-50">
 
             {/* Score breakdown */}
             <div>
@@ -251,18 +279,37 @@ export default function ScoreCard({ result, rank, onDelete }: Props) {
                 </div>
               )}
             </div>
-
-            {/* Download button inside expanded */}
-            <div className="flex justify-end pt-2">
-              <button
-                onClick={() => downloadScorecard(result)}
-                className="flex items-center gap-2 bg-[#1B4F8A] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#133A66] transition"
-              >
-                <Download size={15} /> Download Scorecard
-              </button>
-            </div>
-
           </div>
+
+          {/* Action buttons — outside capturable area */}
+          <div className="flex items-center justify-end gap-2 px-6 py-4 bg-white border-t border-gray-100">
+            {/* Copy as Image */}
+            <button
+              onClick={handleCopyAsImage}
+              disabled={copying}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
+                copyDone
+                  ? 'bg-green-100 text-green-700 border border-green-200'
+                  : 'bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200'
+              } disabled:opacity-50`}
+              title="Copy scorecard as image — paste into email, Slack, or WhatsApp">
+              {copying ? (
+                <><span className="animate-spin text-xs">⏳</span> Capturing...</>
+              ) : copyDone ? (
+                <><span>✅</span> Copied!</>
+              ) : (
+                <><Image size={14} /> Copy as Image</>
+              )}
+            </button>
+
+            {/* Download PDF */}
+            <button
+              onClick={() => downloadScorecard(result)}
+              className="flex items-center gap-2 bg-[#1B4F8A] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#133A66] transition">
+              <Download size={14} /> Download Scorecard
+            </button>
+          </div>
+
         </div>
       )}
     </div>

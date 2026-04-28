@@ -34,7 +34,7 @@ export default function BatchSummary({ results }: Props) {
           { label: 'Total',       value: total,      color: 'text-gray-900',  bg: 'bg-gray-50'   },
           { label: 'Shortlisted', value: shortlisted, color: 'text-green-700', bg: 'bg-green-50'  },
           { label: 'Review',      value: review,      color: 'text-yellow-700',bg: 'bg-yellow-50' },
-          { label: 'Pass',        value: pass,        color: 'text-red-700',   bg: 'bg-red-50'    },
+          { label: 'Not Suitable',        value: pass,        color: 'text-red-700',   bg: 'bg-red-50'    },
           { label: 'Avg Score',   value: avgScore + '%', color: 'text-blue-700', bg: 'bg-blue-50' },
         ].map(({ label, value, color, bg }) => (
           <div key={label} className={`${bg} rounded-xl p-3 text-center`}>

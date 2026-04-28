@@ -41,8 +41,9 @@ export default function JobDetailPage() {
     try {
       const res = await api.scoreBatch(jobId, files)
       setFiles([])
-      loadResults()
-      showToast(`✅ Scored ${res.scored} resume(s)`)
+      await loadResults()
+      const failed = res.failed > 0 ? ` (${res.failed} failed)` : ''
+      showToast(`✅ Scored ${res.scored} of ${res.total} resume(s)${failed}`)
     } catch (e: any) {
       showToast('❌ ' + (e.message || 'Scoring failed'))
     } finally {
@@ -65,7 +66,7 @@ export default function JobDetailPage() {
       r.candidates?.name || 'Unknown',
       r.candidates?.email || '',
       r.overall_score + '%',
-      r.recommendation,
+      r.recommendation === 'PASS' ? 'Not Suitable' : r.recommendation,
       (r.category_scores?.technical?.score || 0) + '%',
       (r.category_scores?.experience?.score || 0) + '%',
       (r.category_scores?.education?.score || 0) + '%',
@@ -194,7 +195,7 @@ export default function JobDetailPage() {
                     { key: 'ALL',       label: 'All' },
                     { key: 'SHORTLIST', label: '✅ Shortlist' },
                     { key: 'REVIEW',    label: '⚠️ Review' },
-                    { key: 'PASS',      label: '❌ Pass' },
+                    { key: 'PASS',      label: '❌ Not Suitable' },
                   ].map(({ key, label }) => (
                     <button key={key} onClick={() => setFilter(key)}
                       className={`px-3 py-1 rounded-full text-xs font-medium transition ${

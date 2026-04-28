@@ -1,130 +1,146 @@
 """
-Prompt Builder — constructs the scoring prompt sent to AI.
-This is your scoring rubric. Edit this to change how AI scores.
+Prompt Builder — AI is the reasoning and quality layer only.
+
+The AI receives rule-computed scores and can:
+  - Adjust EXPERIENCE score by ±15 (quality signals)
+  - Score SOFT SKILLS 0-100 (pure AI, no rules)
+  - Write reasoning for ALL 5 categories
+  
+The AI CANNOT touch: technical, education, stability scores.
+Python always recalculates overall and recommendation.
 """
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
-SYSTEM_PROMPT = """You are an expert ATS (Applicant Tracking System) scoring assistant for HYROI Solutions.
+SYSTEM_PROMPT = """You are an expert HR assistant helping evaluate candidates.
 
-Your job is to score resumes against job descriptions and return a structured JSON response ONLY.
-No conversational text. No markdown. Pure JSON only.
+You have already been given the RULE-COMPUTED SCORES for Technical Skills,
+Education, and Stability. These are calculated deterministically from the
+resume. Do NOT change them.
 
-SCORING RULES:
-1. Score each category from 0 to 100
-2. Apply the weights provided — they define what matters for this specific role
-3. Skill importance levels:
-   - "must": Missing this skill reduces technical score by minimum 20 points
-   - "good": Missing this skill reduces technical score by 8 points
-   - "bonus": Having this skill adds up to 5 points bonus
-4. For experience: consider quality over quantity
-   - Product company experience outweighs service company for same years
-   - Leadership and ownership signals count positively
-   - Career progression matters more than total years alone
-5. For stability: flag if average tenure < 1.5 years AND no clear career progression
-6. Be strict on Must Have skills. Be generous on transferable skills.
-7. Consider the full context of the resume, not just keyword matches
+Your job is to:
+1. Adjust the EXPERIENCE score by at most ±15 based on quality signals
+   (product vs service company, leadership, career progression, domain fit)
+2. Score SOFT SKILLS (0-100) based on communication and collaboration
+   signals in the resume
+3. Write clear, professional reasoning for ALL 5 categories
+4. Write a concise overall AI assessment
 
-RETURN THIS EXACT JSON STRUCTURE:
+IMPORTANT LANGUAGE RULES:
+- Write in plain English that a recruiter can understand
+- Never use technical jargon like "ceiling rule", "capped", "deterministic"
+- If skills are missing, say: "[skill names] were not found in this resume"
+- Be specific — name the actual skills, companies, years
+
+Return ONLY this JSON structure, no markdown, no extra text:
 {
-  "overall_score": <0-100>,
-  "recommendation": "<SHORTLIST|REVIEW|PASS>",
-  "category_scores": {
-    "technical": {
-      "score": <0-100>,
-      "reasoning": "<1-2 sentences explaining this score>"
-    },
-    "experience": {
-      "score": <0-100>,
-      "reasoning": "<1-2 sentences explaining this score>"
-    },
-    "education": {
-      "score": <0-100>,
-      "reasoning": "<1-2 sentences explaining this score>"
-    },
-    "soft_skills": {
-      "score": <0-100>,
-      "reasoning": "<1-2 sentences explaining this score>"
-    },
-    "stability": {
-      "score": <0-100>,
-      "reasoning": "<1-2 sentences explaining this score>"
-    }
+  "experience_adjustment": <integer between -15 and +15>,
+  "soft_skills_score": <integer 0-100>,
+  "category_reasoning": {
+    "technical":   "<clear explanation of what skills were found/missing>",
+    "experience":  "<quality of experience: company type, growth, domain fit>",
+    "education":   "<degree match explanation>",
+    "soft_skills": "<communication, collaboration, leadership signals>",
+    "stability":   "<tenure pattern explanation>"
   },
-  "matched_skills": ["<skill1>", "<skill2>"],
-  "missing_skills": ["<skill1>", "<skill2>"],
-  "red_flags": ["<flag1>", "<flag2>"],
-  "highlights": ["<highlight1>", "<highlight2>"],
-  "ai_reasoning": "<3-4 sentences overall summary explaining the score and recommendation>"
-}
-
-RECOMMENDATION THRESHOLDS:
-- SHORTLIST: overall_score >= 75
-- REVIEW: overall_score >= 50
-- PASS: overall_score < 50"""
+  "highlights": ["<strength 1>", "<strength 2>"],
+  "red_flags": ["<concern 1>"],
+  "ai_reasoning": "<3-4 sentence overall assessment. Start with technical skill match. End with recommendation rationale.>"
+}"""
 
 
 def build_user_prompt(
     resume_text: str,
-    jd: Dict,
+    jd: dict,
     candidate_name: str = "Unknown",
+    rule_scores: Optional[Dict] = None,
+    technical_detail: Optional[Dict] = None,
 ) -> str:
-    """Build the per-resume user prompt from JD config and resume text."""
-
+    """
+    Build prompt for AI — includes rule scores so AI knows the baseline.
+    AI only adjusts experience and writes reasoning.
+    """
     weights = jd.get("scoring_weights", {
-        "technical": 40, "experience": 25,
-        "education": 10, "soft_skills": 15, "stability": 10
+        "technical": 50, "experience": 25,
+        "education": 10, "soft_skills": 5, "stability": 10
     })
 
-    # Format required skills with importance
+    # Skill lists for context
     skill_importance = jd.get("skill_importance", {})
-    required_skills = jd.get("required_skills", [])
+    required_skills  = jd.get("required_skills", [])
 
-    skills_formatted = []
+    must_have    = []
+    good_to_have = []
+    bonus        = []
     for skill in required_skills:
-        skill_name = skill.get("skill", skill) if isinstance(skill, dict) else skill
-        importance = skill_importance.get(skill_name, "must")
-        skills_formatted.append(f"  - {skill_name} [{importance.upper()}]")
+        name = skill.get("skill", skill) if isinstance(skill, dict) else skill
+        imp  = skill_importance.get(name, "must")
+        if imp == "must":       must_have.append(name)
+        elif imp == "good":     good_to_have.append(name)
+        else:                   bonus.append(name)
 
-    nice_to_have = jd.get("nice_to_have_skills", [])
-    nice_formatted = [f"  - {s}" for s in nice_to_have]
+    # Rule scores summary
+    rs = rule_scores or {}
+    tech_score = rs.get("technical", {}).get("score", 0)
+    exp_score  = rs.get("experience", {}).get("score", 50)
+    edu_score  = rs.get("education",  {}).get("score", 50)
+    stab_score = rs.get("stability",  {}).get("score", 60)
+
+    # Technical detail for AI context
+    td = technical_detail or {}
+    found   = td.get("found", [])
+    partial = td.get("partial", [])
+    missing = td.get("missing", [])
 
     custom = jd.get("custom_instructions", "").strip()
 
-    # Compress resume — cap at 3000 chars to save tokens
     resume_compressed = resume_text[:3000].strip()
     if len(resume_text) > 3000:
-        resume_compressed += "\n[... resume truncated for length ...]"
+        resume_compressed += "\n[... resume truncated ...]"
 
     prompt = f"""CANDIDATE: {candidate_name}
-
 JOB TITLE: {jd.get('title', 'Not specified')}
 
 REQUIRED SKILLS:
-{chr(10).join(skills_formatted) if skills_formatted else '  - Not specified'}
+  Must Have:    {', '.join(must_have) if must_have else 'None'}
+  Good to Have: {', '.join(good_to_have) if good_to_have else 'None'}
+  Bonus:        {', '.join(bonus) if bonus else 'None'}
 
-NICE TO HAVE:
-{chr(10).join(nice_formatted) if nice_formatted else '  - None specified'}
-
-EXPERIENCE REQUIRED: {jd.get('experience_min', 0)} to {jd.get('experience_max', 99)} years
-
+EXPERIENCE REQUIRED: {jd.get('experience_min', 0)}–{jd.get('experience_max', 99)} years
 EDUCATION REQUIRED: {jd.get('education_required', 'Not specified')}
 
-SCORING WEIGHTS (must add to 100):
-  - Technical Skills: {weights.get('technical', 40)}%
-  - Experience: {weights.get('experience', 25)}%
-  - Education: {weights.get('education', 10)}%
-  - Soft Skills: {weights.get('soft_skills', 15)}%
-  - Stability: {weights.get('stability', 10)}%
+RULE-COMPUTED SCORES (do not change these):
+  Technical Skills: {tech_score}/100
+    Skills found:   {', '.join(found) if found else 'None'}
+    Partial match:  {', '.join(partial) if partial else 'None'}
+    Missing:        {', '.join(missing) if missing else 'None'}
+  Education:        {edu_score}/100
+  Stability:        {stab_score}/100
+
+EXPERIENCE RULE SCORE: {exp_score}/100 (you may adjust ±15 for quality)
+  Adjust UP if:  product company, leadership role, domain expertise, fast growth
+  Adjust DOWN if: only service company, no ownership, irrelevant domain
+
+SCORING WEIGHTS (for your context):
+  Technical:  {weights.get('technical', 50)}%
+  Experience: {weights.get('experience', 25)}%
+  Education:  {weights.get('education', 10)}%
+  Soft Skills:{weights.get('soft_skills', 5)}%
+  Stability:  {weights.get('stability', 10)}%
 """
 
     if custom:
-        prompt += f"\nSPECIAL INSTRUCTIONS FROM HIRING MANAGER:\n{custom}\n"
+        prompt += f"\nHIRING MANAGER INSTRUCTIONS:\n{custom}\n"
 
     prompt += f"""
-RESUME TEXT:
+RESUME:
 {resume_compressed}
 
-Score this candidate now. Return JSON only."""
+Instructions:
+1. Read the resume carefully
+2. Decide experience_adjustment (-15 to +15) based on quality signals
+3. Score soft_skills based on what you can observe
+4. Write clear reasoning for all 5 categories
+5. Return JSON only"""
 
     return prompt

@@ -1,9 +1,5 @@
-"""
-Pydantic schemas for request/response validation
-"""
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from datetime import datetime
 
 
 class JDCreate(BaseModel):
@@ -15,7 +11,7 @@ class JDCreate(BaseModel):
     experience_min: int = 0
     experience_max: int = 99
     education_required: str = ""
-    scoring_weights: Dict[str, int] = {
+    scoring_weights: Dict[str, Any] = {
         "technical": 40,
         "experience": 25,
         "education": 10,
@@ -23,6 +19,9 @@ class JDCreate(BaseModel):
         "stability": 10
     }
     custom_instructions: str = ""
+    minimum_technical_score: Optional[int] = None
+    shortlist_threshold: int = 75
+    review_threshold: int = 55
 
 
 class JDResponse(BaseModel):
@@ -35,8 +34,11 @@ class JDResponse(BaseModel):
     experience_min: int
     experience_max: int
     education_required: str
-    scoring_weights: Dict[str, int]
+    scoring_weights: Dict[str, Any]
     custom_instructions: str
+    minimum_technical_score: Optional[int]
+    shortlist_threshold: int
+    review_threshold: int
     status: str
     created_at: str
 
