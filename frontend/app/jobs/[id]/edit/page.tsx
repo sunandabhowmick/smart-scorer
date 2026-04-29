@@ -58,6 +58,10 @@ export default function EditJobPage() {
 
   const [skillInput, setSkillInput] = useState('')
 
+  // Calculate next version number dynamically from title
+  const currentVersion = parseInt(form.title.match(/\(v(\d+)\)$/)?.[1] || '1')
+  const newVersion = currentVersion + 1
+
   useEffect(() => {
     const loadJob = async () => {
       try {
@@ -152,13 +156,18 @@ export default function EditJobPage() {
     setError('')
     try {
       const minTech = form.minimum_technical_score === '' ? null : Number(form.minimum_technical_score)
-      const updated = await api.updateJob(jobId, { ...form, minimum_technical_score: minTech })
-      setSavedJobData(updated)
-
-      // If existing scores, ask about re-scoring
+      
       if (existingScoreCount > 0) {
-        setShowReScorePrompt(true)
+        // Create new JD version instead of overwriting
+        const newJob = await api.createJob({
+          ...form,
+          minimum_technical_score: minTech,
+          title: form.title.replace(/ \(v\d+\)$/, '') + ` (v${newVersion})`,
+        })
+        router.push(`/jobs/${newJob.id}`)
       } else {
+        // No existing scores — safe to update in place
+        await api.updateJob(jobId, { ...form, minimum_technical_score: minTech })
         router.push(`/jobs/${jobId}`)
       }
     } catch (e: any) {
