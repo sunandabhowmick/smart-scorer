@@ -218,11 +218,12 @@ export default function EditJobPage() {
                 disabled={false}
                 onClick={() => router.push(`/jobs/${jobId}`)}
                 className="flex-1 px-4 py-3 bg-[#1B4F8A] text-white rounded-lg text-sm font-semibold hover:bg-[#133A66]">
-                📤 Go to Job — Upload Resumes to Re-score
+                📤 Go to Job — Re-upload to Re-score
               </button>
             </div>
             <p className="text-xs text-gray-400 mt-3">
-              💡 To re-score with new settings: go back to the job, upload the same resumes again. New scores will use your updated configuration.
+              💡 <strong>Option 1:</strong> Keep old scores → go back and re-upload resumes manually.<br/>
+              💡 <strong>Option 2:</strong> Save as New JD → creates a copy with new settings, old JD preserved.
             </p>
           </div>
         </div>

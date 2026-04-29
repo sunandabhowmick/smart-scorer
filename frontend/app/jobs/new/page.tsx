@@ -209,6 +209,11 @@ export default function NewJobPage() {
               <span className="bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-semibold">Bonus — adds pts if present</span>
             </div>
 
+            {form.required_skills.length === 0 && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3 text-sm text-yellow-800">
+                ⚠️ No skills added yet. Adding required skills significantly improves scoring accuracy. Without skills, technical scoring will be based on AI judgment only.
+              </div>
+            )}
             {form.required_skills.length > 0 && (
               <div className="space-y-2">
                 {form.required_skills.map(({ skill, importance }) => (

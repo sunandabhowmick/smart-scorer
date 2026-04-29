@@ -3,12 +3,25 @@ on:
   schedule:
     - cron: '0 0 * * *'
   workflow_dispatch:
+
 jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger cleanup endpoint
         run: |
-          curl -X POST "${{ secrets.API_URL }}/api/v1/cleanup" \
+          HTTP_STATUS=$(curl -s -o /tmp/response.txt -w "%{http_code}" \
+            -X POST "${{ secrets.API_URL }}/api/v1/cleanup" \
             -H "Authorization: Bearer ${{ secrets.CLEANUP_SECRET }}" \
-            -H "Content-Type: application/json"
+            -H "Content-Type: application/json" \
+            --max-time 30)
+          
+          echo "HTTP Status: $HTTP_STATUS"
+          echo "Response: $(cat /tmp/response.txt)"
+          
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "✅ Cleanup successful"
+          else
+            echo "❌ Cleanup failed with status $HTTP_STATUS"
+            exit 1
+          fi

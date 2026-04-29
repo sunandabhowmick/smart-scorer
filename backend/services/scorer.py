@@ -35,12 +35,19 @@ async def score_resume(
 
     # ── Layer 1: Rule Engine ──────────────────────────────────────────────────
     required_skills  = job.get("required_skills", [])
+    no_skills_defined = len(required_skills) == 0
     skill_importance = job.get("skill_importance", {})
     exp_min  = int(job.get("experience_min", 0))
     exp_max  = int(job.get("experience_max", 99))
     edu_req  = job.get("education_required", "")
 
     tech_result  = score_technical(resume_text, required_skills, skill_importance)
+    # If no skills defined, set neutral score — AI will assess freely
+    if no_skills_defined:
+        tech_result["score"] = 50
+        tech_result["found"] = []
+        tech_result["missing"] = []
+        tech_result["must_have_missing"] = 0
     exp_result   = score_experience(resume_text, exp_min, exp_max)
     edu_result   = score_education(resume_text, edu_req)
     stab_result  = score_stability(resume_text)
