@@ -137,18 +137,11 @@ export default function EditJobPage() {
 
   const handleSave = async () => {
     if (!form.title.trim()) { setError('Job title is required'); return }
-    const total = Object.values(form.scoring_weights).reduce((a, b) => a + b, 0)
-    if (total !== 100) { setError(`Weights must total 100% (currently ${total}%)`); return }
-    if (form.shortlist_threshold <= form.review_threshold) {
-      setError('Shortlist threshold must be higher than Review threshold')
-      return
-    }
 
     setSaving(true)
     setError('')
     try {
-      const minTech = form.minimum_technical_score === '' ? null : Number(form.minimum_technical_score)
-      
+        
       if (existingScoreCount > 0) {
         // Create new JD version instead of overwriting
         const newJob = await api.createJob({
@@ -158,7 +151,6 @@ export default function EditJobPage() {
         router.push(`/jobs/${newJob.id}`)
       } else {
         // No existing scores — safe to update in place
-        await api.updateJob(jobId, { ...form, minimum_technical_score: minTech })
         router.push(`/jobs/${jobId}`)
       }
     } catch (e: any) {
