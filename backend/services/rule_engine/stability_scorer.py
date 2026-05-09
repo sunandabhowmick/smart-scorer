@@ -16,11 +16,19 @@ def _parse_date(token: str) -> Optional[datetime]:
     t = token.strip().lower()
     if t in _CURRENT:
         return datetime.now()
+    # "Mar-2022" or "Mar 2022"
+    m = re.match(r"(\w{3})[-\s](\d{4})", t)
+    if m:
+        month = _MONTH_MAP.get(m.group(1).lower())
+        if month:
+            return datetime(int(m.group(2)), month, 1)
+    # "January 2022"
     m = re.match(r"(\w+)\s+(\d{4})", t)
     if m:
         month = _MONTH_MAP.get(m.group(1).lower())
         if month:
             return datetime(int(m.group(2)), month, 1)
+    # "2022"
     m = re.match(r"^(\d{4})$", t)
     if m:
         return datetime(int(m.group(1)), 1, 1)

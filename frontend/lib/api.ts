@@ -29,6 +29,16 @@ export const api = {
     return res.data.jobs
   },
 
+  async extractSkills(jdText: string) {
+    const token = await getToken()
+    const res = await axios.post(
+      `${API_URL}/api/v1/jobs/extract-skills`,
+      { description: jdText },
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    return res.data.skills
+  },
+
   async createJob(data: any) {
     const token = await getToken()
     const res = await axios.post(`${API_URL}/api/v1/jobs`, data, {

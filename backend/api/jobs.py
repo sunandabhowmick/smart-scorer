@@ -2,6 +2,7 @@
 Job Description endpoints — create, list, get, update, delete
 """
 from fastapi import APIRouter, HTTPException, Header
+from pydantic import BaseModel
 from typing import Optional
 from models.schemas import JDCreate
 from db.supabase_client import supabase
@@ -101,3 +102,20 @@ async def delete_job(
         return {"message": "Job archived"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class ExtractSkillsRequest(BaseModel):
+    description: str = ""
+
+@router.post("/extract-skills")
+async def extract_skills_endpoint(
+    body: ExtractSkillsRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Extract skills from JD text using AI."""
+    _get_user(authorization)
+    from services.ai.jd_extractor import extract_skills_from_jd
+    if not body.description or len(body.description.strip()) < 20:
+        return {"skills": []}
+    skills = await extract_skills_from_jd(body.description)
+    return {"skills": skills}

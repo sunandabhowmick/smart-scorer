@@ -145,6 +145,8 @@ function getHTML(element: HTMLElement): string {
   [class*="space-y-5"] > * + * { margin-top: 20px !important; }
   [class*="grid-cols-2"]  { grid-template-columns: 1fr 1fr !important; }
   [class*="grid-cols-1"]  { grid-template-columns: 1fr !important; }
+  [class*="md:grid-cols-2"] { grid-template-columns: 1fr 1fr !important; }
+  [class*="grid"]         { display: grid !important; }
   [class*="w-full"]       { width: 100% !important; }
   [class*="overflow-hidden"]{ overflow: hidden !important; }
 

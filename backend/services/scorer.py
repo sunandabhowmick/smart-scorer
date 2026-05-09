@@ -1,27 +1,57 @@
 """
-Scorer — main orchestrator.
-
-Pipeline:
-  1. Extract text
-  2. Run rule engine (technical, experience, education, stability)
-  3. Call AI (reasoning + experience adjustment + soft skills)
-  4. Merge and enforce rules
-  5. Return final result
+Scorer - hybrid rule engine + AI pipeline.
+Auto-extracts skills from JD text when no manual skills defined.
 """
 from __future__ import annotations
-from typing import Optional
-
 from services.rule_engine import (
-    score_technical,
-    score_experience,
-    score_education,
-    score_stability,
+    score_technical, score_experience,
+    score_education, score_stability,
 )
-from services.ai.prompt_builder import SYSTEM_PROMPT, build_user_prompt
+from services.ai.prompt_builder  import SYSTEM_PROMPT, build_user_prompt
 from services.ai.response_parser import parse_ai_response, build_final_scores
-from services.ai.router import get_adapter
-from services.resume_compressor import compress_resume
-from config import settings
+from services.ai.jd_extractor   import extract_skills_from_jd, build_extracted_skill_importance
+from services.ai.router          import get_adapter
+from services.resume_compressor  import compress_resume
+from db.supabase_client          import supabase
+from config                      import settings
+
+
+async def _get_skills(job: dict) -> tuple:
+    """
+    Returns (required_skills, skill_importance).
+    Priority:
+      1. Manual skills defined by recruiter
+      2. Cached extracted skills in DB
+      3. Extract from JD text now and cache
+      4. Empty - AI scores freely
+    """
+    manual = job.get("required_skills", [])
+    if manual and len(manual) > 0:
+        print(f"Using {len(manual)} manual skills")
+        return manual, job.get("skill_importance", {})
+
+    cached = job.get("extracted_skills", [])
+    if cached and len(cached) > 0:
+        print(f"Using {len(cached)} cached extracted skills: {cached[:3]}")
+        return build_extracted_skill_importance(cached)
+
+    jd_text = (job.get("description") or "").strip()
+    if len(jd_text) > 50:
+        print(f"Extracting skills from JD text...")
+        extracted = await extract_skills_from_jd(jd_text)
+        if extracted:
+            print(f"Extracted {len(extracted)} skills: {extracted}")
+            try:
+                supabase.table("job_descriptions").update({
+                    "extracted_skills":    extracted,
+                    "skills_extracted_at": "now()",
+                }).eq("id", job["id"]).execute()
+            except Exception as e:
+                print(f"Cache save error: {e}")
+            return build_extracted_skill_importance(extracted)
+
+    print("No skills found anywhere - AI scores freely")
+    return [], {}
 
 
 async def score_resume(
@@ -29,28 +59,28 @@ async def score_resume(
     job: dict,
     candidate_name: str = "Unknown",
 ) -> dict:
-    """
-    Full scoring pipeline. Returns final scored result dict.
-    """
 
-    # ── Layer 1: Rule Engine ──────────────────────────────────────────────────
-    required_skills  = job.get("required_skills", [])
-    no_skills_defined = len(required_skills) == 0
-    skill_importance = job.get("skill_importance", {})
-    exp_min  = int(job.get("experience_min", 0))
-    exp_max  = int(job.get("experience_max", 99))
-    edu_req  = job.get("education_required", "")
+    print(f"Job keys: {list(job.keys())}")
+    print(f"Description length: {len(job.get('description') or '')}")
+    print(f"Manual skills: {len(job.get('required_skills') or [])}")
+    print(f"Extracted skills: {job.get('extracted_skills')}")
+    required_skills, skill_importance = await _get_skills(job)
+    no_skills = len(required_skills) == 0
+
+    exp_min = int(job.get("experience_min") or 0)
+    exp_max = int(job.get("experience_max") or 0)
+    edu_req = job.get("education_required", "")
 
     tech_result  = score_technical(resume_text, required_skills, skill_importance)
-    # If no skills defined, set neutral score — AI will assess freely
-    if no_skills_defined:
-        tech_result["score"] = 50
-        tech_result["found"] = []
-        tech_result["missing"] = []
-        tech_result["must_have_missing"] = 0
     exp_result   = score_experience(resume_text, exp_min, exp_max)
     edu_result   = score_education(resume_text, edu_req)
     stab_result  = score_stability(resume_text)
+
+    if no_skills:
+        tech_result["score"]             = 50
+        tech_result["found"]             = []
+        tech_result["missing"]           = []
+        tech_result["must_have_missing"] = 0
 
     rule_scores = {
         "technical":  tech_result,
@@ -59,16 +89,14 @@ async def score_resume(
         "stability":  stab_result,
     }
 
-    must_have_missing = tech_result["must_have_missing"]
-
-    # ── Layer 2: AI (reasoning + experience quality + soft skills) ────────────
-    compressed = compress_resume(resume_text)
+    compressed  = compress_resume(resume_text)
     user_prompt = build_user_prompt(
-        resume_text       = compressed,
-        jd                = job,
-        candidate_name    = candidate_name,
-        rule_scores       = rule_scores,
-        technical_detail  = tech_result,
+        resume_text      = compressed,
+        jd               = job,
+        candidate_name   = candidate_name,
+        rule_scores      = rule_scores,
+        technical_detail = tech_result,
+        no_skills        = no_skills,
     )
 
     adapter = get_adapter()
@@ -81,16 +109,13 @@ async def score_resume(
 
     ai_response = parse_ai_response(raw_response)
 
-    # ── Merge + enforce rules ─────────────────────────────────────────────────
     final = build_final_scores(
         rule_scores       = rule_scores,
         ai_response       = ai_response,
         job               = job,
-        must_have_missing = must_have_missing,
+        must_have_missing = tech_result["must_have_missing"],
     )
 
-    final["tokens_used"]    = tokens_used
-    final["rule_scores"]    = rule_scores    # for debugging
-    final["model_used"]     = settings.AI_PROVIDER
-
+    final["tokens_used"] = tokens_used
+    final["model_used"]  = settings.AI_PROVIDER
     return final

@@ -1,51 +1,42 @@
 """
-Prompt Builder — AI is the reasoning and quality layer only.
-
-The AI receives rule-computed scores and can:
-  - Adjust EXPERIENCE score by ±15 (quality signals)
-  - Score SOFT SKILLS 0-100 (pure AI, no rules)
-  - Write reasoning for ALL 5 categories
-  
-The AI CANNOT touch: technical, education, stability scores.
-Python always recalculates overall and recommendation.
+Prompt Builder — AI handles reasoning and experience quality adjustment.
+4 categories only: Technical, Experience, Education, Stability.
+Soft Skills removed.
 """
 from typing import Dict, List, Optional
 
 
-SYSTEM_PROMPT = """You are an expert HR assistant helping evaluate candidates.
+SYSTEM_PROMPT = """You are an expert HR assistant helping evaluate candidates for job roles.
 
-You have already been given the RULE-COMPUTED SCORES for Technical Skills,
-Education, and Stability. These are calculated deterministically from the
-resume. Do NOT change them.
+You have been given RULE-COMPUTED SCORES for Technical Skills, Education, and Stability.
+These are calculated deterministically. Do NOT change them.
 
-Your job is to:
-1. Adjust the EXPERIENCE score by at most ±15 based on quality signals
-   (product vs service company, leadership, career progression, domain fit)
-2. Score SOFT SKILLS (0-100) based on communication and collaboration
-   signals in the resume
-3. Write clear, professional reasoning for ALL 5 categories
-4. Write a concise overall AI assessment
+Your responsibilities:
+1. Adjust EXPERIENCE score by at most ±15 based on quality signals:
+   - Adjust UP for: product company, leadership role, domain expertise, fast career growth
+   - Adjust DOWN for: service company only, no ownership, irrelevant domain
+2. Write clear professional reasoning for ALL 4 categories
+3. Write a concise overall AI assessment (3-4 sentences)
 
-IMPORTANT LANGUAGE RULES:
-- Write in plain English that a recruiter can understand
-- Never use technical jargon like "ceiling rule", "capped", "deterministic"
+IMPORTANT:
+- Write in plain English a recruiter can understand
+- Never use jargon like "ceiling rule", "capped", "deterministic", "Python override"
 - If skills are missing, say: "[skill names] were not found in this resume"
-- Be specific — name the actual skills, companies, years
+- Be specific — mention actual skills, companies, years
+- For education: if candidate has higher degree than required, note this positively
 
-Return ONLY this JSON structure, no markdown, no extra text:
+Return ONLY this JSON, no markdown:
 {
-  "experience_adjustment": <integer between -15 and +15>,
-  "soft_skills_score": <integer 0-100>,
+  "experience_adjustment": <integer -15 to +15>,
   "category_reasoning": {
-    "technical":   "<clear explanation of what skills were found/missing>",
-    "experience":  "<quality of experience: company type, growth, domain fit>",
-    "education":   "<degree match explanation>",
-    "soft_skills": "<communication, collaboration, leadership signals>",
-    "stability":   "<tenure pattern explanation>"
+    "technical":  "<what skills were found/missing, depth of expertise>",
+    "experience": "<quality signals: company type, growth, domain fit, leadership>",
+    "education":  "<degree match explanation, note if higher than required>",
+    "stability":  "<tenure pattern, job hopping assessment>"
   },
-  "highlights": ["<strength 1>", "<strength 2>"],
+  "highlights": ["<strength 1>", "<strength 2>", "<strength 3>"],
   "red_flags": ["<concern 1>"],
-  "ai_reasoning": "<3-4 sentence overall assessment. Start with technical skill match. End with recommendation rationale.>"
+  "ai_reasoning": "<3-4 sentence overall assessment. Lead with technical skill match. End with clear hiring recommendation rationale.>"
 }"""
 
 
@@ -55,23 +46,13 @@ def build_user_prompt(
     candidate_name: str = "Unknown",
     rule_scores: Optional[Dict] = None,
     technical_detail: Optional[Dict] = None,
+    no_skills: bool = False,
 ) -> str:
-    """
-    Build prompt for AI — includes rule scores so AI knows the baseline.
-    AI only adjusts experience and writes reasoning.
-    """
-    weights = jd.get("scoring_weights", {
-        "technical": 50, "experience": 25,
-        "education": 10, "soft_skills": 5, "stability": 10
-    })
 
-    # Skill lists for context
     skill_importance = jd.get("skill_importance", {})
     required_skills  = jd.get("required_skills", [])
 
-    must_have    = []
-    good_to_have = []
-    bonus        = []
+    must_have, good_to_have, bonus = [], [], []
     for skill in required_skills:
         name = skill.get("skill", skill) if isinstance(skill, dict) else skill
         imp  = skill_importance.get(name, "must")
@@ -79,54 +60,48 @@ def build_user_prompt(
         elif imp == "good":     good_to_have.append(name)
         else:                   bonus.append(name)
 
-    # Rule scores summary
     rs = rule_scores or {}
-    tech_score = rs.get("technical", {}).get("score", 0)
-    exp_score  = rs.get("experience", {}).get("score", 50)
-    edu_score  = rs.get("education",  {}).get("score", 50)
-    stab_score = rs.get("stability",  {}).get("score", 60)
+    tech  = rs.get("technical",  {})
+    exp   = rs.get("experience", {})
+    edu   = rs.get("education",  {})
+    stab  = rs.get("stability",  {})
 
-    # Technical detail for AI context
-    td = technical_detail or {}
-    found   = td.get("found", [])
+    td      = technical_detail or {}
+    found   = td.get("found",   [])
     partial = td.get("partial", [])
     missing = td.get("missing", [])
 
-    custom = jd.get("custom_instructions", "").strip()
+    exp_score  = exp.get("score")
+    edu_score  = edu.get("score")
+    tech_score = tech.get("score", 50)
+    stab_score = stab.get("score", 60)
 
-    resume_compressed = resume_text[:3000].strip()
-    if len(resume_text) > 3000:
-        resume_compressed += "\n[... resume truncated ...]"
+    custom = jd.get("custom_instructions", "").strip()
+    exp_min = jd.get("experience_min", 0)
+    exp_max = jd.get("experience_max", 0)
 
     prompt = f"""CANDIDATE: {candidate_name}
 JOB TITLE: {jd.get('title', 'Not specified')}
 
 REQUIRED SKILLS:
-  Must Have:    {', '.join(must_have) if must_have else 'None'}
+  Must Have:    {', '.join(must_have) if must_have else 'None defined'}
   Good to Have: {', '.join(good_to_have) if good_to_have else 'None'}
   Bonus:        {', '.join(bonus) if bonus else 'None'}
 
-EXPERIENCE REQUIRED: {jd.get('experience_min', 0)}–{jd.get('experience_max', 99)} years
+EXPERIENCE REQUIRED: {f"{exp_min}–{exp_max} years" if exp_min or exp_max else "Not specified"}
 EDUCATION REQUIRED: {jd.get('education_required', 'Not specified')}
 
-RULE-COMPUTED SCORES (do not change these):
-  Technical Skills: {tech_score}/100
-    Skills found:   {', '.join(found) if found else 'None'}
-    Partial match:  {', '.join(partial) if partial else 'None'}
-    Missing:        {', '.join(missing) if missing else 'None'}
-  Education:        {edu_score}/100
-  Stability:        {stab_score}/100
+RULE-COMPUTED SCORES (do not change technical, education, stability):
+  Technical Skills: {f"{tech_score}/100" if not no_skills else "No skills defined — assess freely based on JD and resume"}
+    Found in resume:  {', '.join(found) if found else 'None'}
+    Partial match:    {', '.join(partial) if partial else 'None'}
+    Not found:        {', '.join(missing) if missing else 'None'}
+  Education:  {f"{edu_score}/100" if edu_score is not None else "Not scored (not found or no requirement)"}
+  Stability:  {stab_score}/100
 
-EXPERIENCE RULE SCORE: {exp_score}/100 (you may adjust ±15 for quality)
-  Adjust UP if:  product company, leadership role, domain expertise, fast growth
-  Adjust DOWN if: only service company, no ownership, irrelevant domain
-
-SCORING WEIGHTS (for your context):
-  Technical:  {weights.get('technical', 50)}%
-  Experience: {weights.get('experience', 25)}%
-  Education:  {weights.get('education', 10)}%
-  Soft Skills:{weights.get('soft_skills', 5)}%
-  Stability:  {weights.get('stability', 10)}%
+EXPERIENCE BASE SCORE: {f"{exp_score}/100" if exp_score is not None else "Not scored (no requirement set)"}
+  You may adjust this by ±15 for quality signals.
+  Candidate years: {exp.get('years', 'unknown')}
 """
 
     if custom:
@@ -134,13 +109,8 @@ SCORING WEIGHTS (for your context):
 
     prompt += f"""
 RESUME:
-{resume_compressed}
+{resume_text}
 
-Instructions:
-1. Read the resume carefully
-2. Decide experience_adjustment (-15 to +15) based on quality signals
-3. Score soft_skills based on what you can observe
-4. Write clear reasoning for all 5 categories
-5. Return JSON only"""
+Return JSON only."""
 
     return prompt

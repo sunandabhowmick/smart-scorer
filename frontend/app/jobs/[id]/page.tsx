@@ -16,7 +16,10 @@ export default function JobDetailPage() {
   const [results, setResults] = useState<any[]>([])
   const [files, setFiles] = useState<File[]>([])
   const [scoring, setScoring] = useState(false)
-  const [filter, setFilter] = useState('ALL')
+  const [showFilter, setShowFilter] = useState(false)
+  const [filterMin, setFilterMin] = useState({ technical: 0, experience: 0, education: 0, stability: 0 })
+  const [filterMax, setFilterMax] = useState({ technical: 100, experience: 100, education: 100, stability: 100 })
+  const [includeUnscored, setIncludeUnscored] = useState(true)
   const [toast, setToast] = useState('')
 
   useEffect(() => {
@@ -85,8 +88,17 @@ export default function JobDetailPage() {
     setTimeout(() => setToast(''), 3000)
   }
 
-  const filtered = filter === 'ALL' ? results
-    : results.filter(r => r.recommendation === filter)
+  const filtered = results.filter(r => {
+    const cats = r.category_scores || {}
+    const check = (key: string) => {
+      const score = cats[key]?.score ?? null
+      if (score === null) return includeUnscored
+      const min = filterMin[key as keyof typeof filterMin]
+      const max = filterMax[key as keyof typeof filterMax]
+      return score >= min && score <= max
+    }
+    return check('technical') && check('experience') && check('education') && check('stability')
+  })
 
   return (
     <div className="min-h-screen bg-[#F0F4F8]">
@@ -182,47 +194,103 @@ export default function JobDetailPage() {
           <div className="bg-white rounded-xl border border-gray-200">
 
             {/* Results toolbar */}
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-3 flex-wrap">
+            <div className="px-6 py-4 border-b border-gray-100 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-3">
                 <h2 className="font-semibold text-gray-900">
                   Candidates
                   <span className="text-gray-400 font-normal ml-1 text-sm">
                     ({filtered.length} of {results.length})
                   </span>
+                  {filtered.length < results.length && (
+                    <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                      Filter active
+                    </span>
+                  )}
                 </h2>
-                <div className="flex gap-1">
-                  {[
-                    { key: 'ALL',       label: 'All' },
-                    { key: 'SHORTLIST', label: '✅ Shortlist' },
-                    { key: 'REVIEW',    label: '⚠️ Review' },
-                    { key: 'PASS',      label: '❌ Not Suitable' },
-                  ].map(({ key, label }) => (
-                    <button key={key} onClick={() => setFilter(key)}
-                      className={`px-3 py-1 rounded-full text-xs font-medium transition ${
-                        filter === key
-                          ? 'bg-[#1B4F8A] text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}>
-                      {label}
-                    </button>
-                  ))}
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={() => setShowFilter(!showFilter)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                      showFilter
+                        ? 'bg-[#1B4F8A] text-white border-[#1B4F8A]'
+                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                    }`}>
+                    🎚️ Filter by Score
+                  </button>
+                  <button onClick={handleCopyAll}
+                    className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 transition">
+                    <Copy size={13} /> Copy All
+                  </button>
+                  <a href={api.getExportUrl(jobId)} target="_blank"
+                    className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 transition">
+                    <Download size={13} /> Export Excel
+                  </a>
                 </div>
               </div>
 
-              <div className="flex gap-2 flex-wrap">
-                <button onClick={handleCopyAll}
-                  className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 transition">
-                  <Copy size={13} /> Copy All
-                </button>
-                <a href={api.getExportUrl(jobId)} target="_blank"
-                  className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 transition">
-                  <Download size={13} /> Export Excel
-                </a>
-                <a href={api.getExportUrl(jobId, true)} target="_blank"
-                  className="flex items-center gap-1.5 bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-green-700 transition">
-                  <Download size={13} /> Shortlisted Only
-                </a>
-              </div>
+              {/* Filter Panel — hidden by default */}
+              {showFilter && (
+                <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      Filter by Score Range
+                    </p>
+                    <button
+                      onClick={() => {
+                        setFilterMin({ technical: 0, experience: 0, education: 0, stability: 0 })
+                        setFilterMax({ technical: 100, experience: 100, education: 100, stability: 100 })
+                        setIncludeUnscored(true)
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                      Reset
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                      { key: 'technical',  label: '💻 Technical',  color: '#1B4F8A' },
+                      { key: 'experience', label: '📅 Experience', color: '#16A34A' },
+                      { key: 'education',  label: '🎓 Education',  color: '#7C3AED' },
+                      { key: 'stability',  label: '📊 Stability',  color: '#EA580C' },
+                    ].map(({ key, label, color }) => (
+                      <div key={key} className="bg-white rounded-lg border border-gray-200 p-3">
+                        <p className="text-xs font-semibold mb-2" style={{ color }}>
+                          {label}
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number" min={0} max={100}
+                            value={filterMin[key as keyof typeof filterMin]}
+                            onChange={e => setFilterMin(f => ({ ...f, [key]: Number(e.target.value) }))}
+                            className="w-12 border border-gray-200 rounded px-1.5 py-1 text-xs text-center focus:outline-none focus:border-gray-400"
+                          />
+                          <span className="text-gray-400 text-xs">—</span>
+                          <input
+                            type="number" min={0} max={100}
+                            value={filterMax[key as keyof typeof filterMax]}
+                            onChange={e => setFilterMax(f => ({ ...f, [key]: Number(e.target.value) }))}
+                            className="w-12 border border-gray-200 rounded px-1.5 py-1 text-xs text-center focus:outline-none focus:border-gray-400"
+                          />
+                          <span className="text-gray-400 text-xs">%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="includeUnscored"
+                      checked={includeUnscored}
+                      onChange={e => setIncludeUnscored(e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                    <label htmlFor="includeUnscored" className="text-xs text-gray-600">
+                      Include candidates where a category was not scored (—)
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Score cards */}

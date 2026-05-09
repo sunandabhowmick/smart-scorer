@@ -1,3 +1,8 @@
+"""
+Experience Scorer - simple linear calculation.
+score = min(100, round(candidate_years / required_years * 100))
+100% when no requirement set.
+"""
 from __future__ import annotations
 import re
 from datetime import datetime
@@ -10,30 +15,44 @@ _MONTH_MAP = {
     "july":7,"august":8,"september":9,"october":10,
     "november":11,"december":12,
 }
-_CURRENT = {"present","current","now","till date","to date","ongoing"}
+_CURRENT = {"present","current","now","till date","to date","ongoing","till now","todate"}
 
 _PATTERNS = [
-    r"(\w+\s+\d{4})\s*[–\-—to]+\s*(\w+(?:\s+\d{4})?)",
+    # "from Mar-2022 to Till Date"
+    r"from\s+(\w{3}[-\s]\d{4})\s+to\s+(\w+(?:[-\s]\d{4})?)",
+    # "Mar-2022 to Present" or "Mar 2022 - Present"
+    r"(\w{3}[-\s]\d{4})\s*(?:to|[-–—])\s*(\w+(?:[-\s]\d{4})?)",
+    # "August 2020 to March 2022"
+    r"(\w+\s+\d{4})\s+to\s+(\w+\s+\d{4})",
+    # "January 2022 – Present"
+    r"(\w+\s+\d{4})\s*[–\-—]+\s*(\w+(?:\s+\d{4})?)",
+    # "2020 – 2023"
     r"\b(\d{4})\s*[–\-—to]+\s*(\d{4}|present|current|now)\b",
-    r"(\d{1,2})[/\-](\d{4})\s*[–\-—to]+\s*(\d{1,2})[/\-](\d{4})",
+    # "01/2020 – 06/2023"
+    r"(\d{1,2})[/\-](\d{4})\s*[–\-—]+\s*(\d{1,2})[/\-](\d{4})",
 ]
 
 
 def _parse_date(token: str) -> Optional[datetime]:
-    t = token.strip().lower()
+    t = token.strip().lower().rstrip('.')
     if t in _CURRENT:
         return datetime.now()
-    m = re.match(r"(\w+)\s+(\d{4})", t)
+    # "Mar-2022" or "Mar 2022"
+    m = re.match(r"(\w{3})[-\s](\d{4})$", t)
     if m:
-        month = _MONTH_MAP.get(m.group(1).lower())
+        month = _MONTH_MAP.get(m.group(1))
         if month:
             return datetime(int(m.group(2)), month, 1)
+    # "January 2022" or "August 2020"
+    m = re.match(r"(\w+)\s+(\d{4})$", t)
+    if m:
+        month = _MONTH_MAP.get(m.group(1)[:3])
+        if month:
+            return datetime(int(m.group(2)), month, 1)
+    # "2022"
     m = re.match(r"^(\d{4})$", t)
     if m:
         return datetime(int(m.group(1)), 1, 1)
-    m = re.match(r"(\d{1,2})[/\-](\d{4})", t)
-    if m:
-        return datetime(int(m.group(2)), int(m.group(1)), 1)
     return None
 
 
@@ -46,7 +65,8 @@ def extract_experience_years(resume_text: str) -> float:
             g = m.groups()
             try:
                 if len(g) == 2:
-                    start, end = _parse_date(g[0]), _parse_date(g[1])
+                    start = _parse_date(g[0])
+                    end   = _parse_date(g[1])
                 elif len(g) == 4:
                     start = _parse_date(f"{g[0]}/{g[1]}")
                     end   = _parse_date(f"{g[2]}/{g[3]}")
@@ -54,12 +74,13 @@ def extract_experience_years(resume_text: str) -> float:
                     continue
                 if start and end and start < end:
                     yrs = (end - start).days / 365.25
-                    if 0 < yrs <= 20:
+                    if 0.1 < yrs <= 25:
                         ranges.append((start, end))
             except (ValueError, TypeError):
                 continue
 
     if not ranges:
+        # Fallback: look for "X years of experience"
         for m in re.finditer(
             r"(\d+(?:\.\d+)?)\s*\+?\s*years?\s+(?:of\s+)?(?:experience|exp)",
             text, re.IGNORECASE
@@ -70,6 +91,7 @@ def extract_experience_years(resume_text: str) -> float:
                 pass
         return 0.0
 
+    # Merge overlapping ranges
     ranges.sort(key=lambda r: r[0])
     merged = [ranges[0]]
     for s, e in ranges[1:]:
@@ -79,23 +101,58 @@ def extract_experience_years(resume_text: str) -> float:
         else:
             merged.append((s, e))
 
-    return round(sum((e-s).days for s,e in merged) / 365.25, 1)
+    return round(sum((e - s).days for s, e in merged) / 365.25, 1)
 
 
-def score_experience(resume_text: str, exp_min: int = 0, exp_max: int = 99) -> dict:
+def score_experience(
+    resume_text: str,
+    exp_min: int = 0,
+    exp_max: int = 0,
+) -> dict:
+    required = exp_min or exp_max
+
+    # No requirement set → 100% for everyone
+    if not required:
+        return {
+            "score":     100,
+            "years":     extract_experience_years(resume_text) or None,
+            "required":  None,
+            "reasoning": "No experience requirement set for this role.",
+        }
+
     years = extract_experience_years(resume_text)
 
+    # Dates not parseable
     if years == 0:
-        score, reasoning = 30, "Could not determine experience from resume dates."
-    elif years < exp_min:
-        shortfall = exp_min - years
-        score = 70 if shortfall <= 1 else (50 if shortfall <= 2 else 30)
-        reasoning = f"{years} years found; {exp_min} years required."
-    elif years > exp_max and exp_max < 99:
-        score, reasoning = 80, f"{years} years (overqualified for {exp_max} year max)."
-    else:
-        fit = (years - exp_min) / max(exp_max - exp_min, 1) if exp_max > exp_min else 1.0
-        score = int(70 + fit * 25)
-        reasoning = f"{years} years experience within the {exp_min}–{exp_max} year requirement."
+        # Try to find a years mention
+        return {
+            "score":     None,
+            "years":     None,
+            "required":  required,
+            "reasoning": "Experience duration could not be determined from this resume.",
+        }
 
-    return {"score": max(0, min(100, score)), "years": years, "reasoning": reasoning}
+    score = min(100, round(years / required * 100))
+
+    if years >= required:
+        reasoning = (
+            f"{years} years of experience — meets the "
+            f"{required} year requirement."
+        )
+    elif score >= 80:
+        reasoning = (
+            f"{years} years of experience — slightly below the "
+            f"{required} year requirement ({score}% match)."
+        )
+    else:
+        reasoning = (
+            f"{years} years of experience — below the "
+            f"{required} year requirement ({score}% match)."
+        )
+
+    return {
+        "score":     score,
+        "years":     years,
+        "required":  required,
+        "reasoning": reasoning,
+    }

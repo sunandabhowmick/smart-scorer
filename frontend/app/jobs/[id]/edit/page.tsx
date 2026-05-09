@@ -48,9 +48,6 @@ export default function EditJobPage() {
     education_required: '',
     custom_instructions: '',
     scoring_weights: { technical:35, experience:25, education:10, soft_skills:15, stability:15 },
-    shortlist_threshold: 75,
-    review_threshold: 55,
-    minimum_technical_score: '' as string | number,
     required_skills: [] as { skill: string; importance: string }[],
     nice_to_have_skills: [] as string[],
     skill_importance: {} as Record<string, string>,
@@ -84,10 +81,7 @@ export default function EditJobPage() {
             soft_skills:w.soft_skills?? 15,
             stability:  w.stability  ?? 10,
           },
-          shortlist_threshold: job.shortlist_threshold ?? w.shortlist_threshold ?? 75,
-          review_threshold: job.review_threshold ?? w.review_threshold ?? 55,
-          minimum_technical_score: job.minimum_technical_score ?? '',
-          required_skills: job.required_skills || [],
+                            required_skills: job.required_skills || [],
           nice_to_have_skills: job.nice_to_have_skills || [],
           skill_importance: job.skill_importance || {},
         })
@@ -107,9 +101,7 @@ export default function EditJobPage() {
     setForm(f => ({
       ...f,
       scoring_weights: preset.weights,
-      shortlist_threshold: preset.thresholds.shortlist,
-      review_threshold: preset.thresholds.review,
-    }))
+        }))
   }
 
   const addSkill = () => {
@@ -161,8 +153,7 @@ export default function EditJobPage() {
         // Create new JD version instead of overwriting
         const newJob = await api.createJob({
           ...form,
-          minimum_technical_score: minTech,
-          title: form.title.replace(/ \(v\d+\)$/, '') + ` (v${newVersion})`,
+                title: form.title.replace(/ \(v\d+\)$/, '') + ` (v${newVersion})`,
         })
         router.push(`/jobs/${newJob.id}`)
       } else {
