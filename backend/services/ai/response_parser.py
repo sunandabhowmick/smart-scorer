@@ -71,7 +71,8 @@ def build_final_scores(
 
     # Apply Must Have ceiling to technical
     from services.rule_engine.technical_scorer import apply_must_have_ceiling
-    tech_score = apply_must_have_ceiling(tech_score, must_have_missing)
+    total_must_have = rule_tech.get("total_must_have", 0)
+    tech_score = apply_must_have_ceiling(tech_score, must_have_missing, total_must_have)
 
     # Build category scores
     category_scores = {

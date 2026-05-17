@@ -137,9 +137,13 @@ def score_technical(
     }
 
 
-def apply_must_have_ceiling(score: int, must_have_missing: int) -> int:
-    ceilings = {1: 75, 2: 55, 3: 35}
-    ceiling = ceilings.get(must_have_missing, 20 if must_have_missing >= 4 else None)
-    if ceiling is None:
+def apply_must_have_ceiling(score: int, must_have_missing: int, total_must_have: int = 0) -> int:
+    if must_have_missing == 0:
         return score
+    pct = (must_have_missing / total_must_have * 100) if total_must_have > 0 else must_have_missing * 25
+    if pct <= 20:   ceiling = 85
+    elif pct <= 40: ceiling = 70
+    elif pct <= 60: ceiling = 50
+    elif pct <= 80: ceiling = 30
+    else:           ceiling = 15
     return min(score, ceiling)

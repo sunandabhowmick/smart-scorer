@@ -34,19 +34,48 @@ def _extract_phone(text: str) -> Optional[str]:
 
 
 def _extract_name(text: str) -> Optional[str]:
-    for line in text.strip().splitlines()[:5]:
+    # Words that should never appear in a candidate name
+    NOISE_WORDS = [
+        'resume', 'cv', 'curriculum', 'vitae', 'profile', 'summary',
+        'objective', 'experience', 'education', 'skills', 'linkedin',
+        'github', 'portfolio', 'contact', 'address', 'phone', 'email',
+        'mobile', 'http', 'www', 'engineer', 'developer', 'manager',
+        'analyst', 'designer', 'consultant', 'specialist', 'lead',
+        'senior', 'junior', 'intern', 'fresher', 'candidate',
+    ]
+
+    for line in text.strip().splitlines()[:10]:
         line = line.strip()
+        if not line or len(line) > 60:
+            continue
+
+        # Remove common suffixes that appear on name lines
+        line = re.sub(r'\s*[\|•·]\s*linkedin.*$', '', line, flags=re.IGNORECASE)
+        line = re.sub(r'\s*[\|•·]\s*github.*$', '', line, flags=re.IGNORECASE)
+        line = re.sub(r'\s*[\|•·]\s*http.*$', '', line, flags=re.IGNORECASE)
+        line = re.sub(r'\s*linkedin.*$', '', line, flags=re.IGNORECASE)
+        line = re.sub(r'\s*github.*$', '', line, flags=re.IGNORECASE)
+        line = re.sub(r'https?://\S+', '', line)
+        line = line.strip()
+
         if not line or len(line) > 50:
             continue
-        if '@' in line or re.search(r'\d{5,}', line):
+
+        # Skip lines with email, phone, digits
+        if '@' in line or re.search(r'\d{4,}', line):
             continue
-        skip = ['resume', 'cv', 'curriculum', 'profile', 'summary',
-                'objective', 'experience', 'education', 'skills']
-        if any(k in line.lower() for k in skip):
+
+        # Skip lines with noise words
+        lower = line.lower()
+        if any(w in lower for w in NOISE_WORDS):
             continue
+
+        # Must look like a name: 2-4 words, mostly alphabetic
         words = line.split()
-        if 1 <= len(words) <= 5:
-            alpha = sum(c.isalpha() or c.isspace() for c in line)
-            if alpha / len(line) > 0.8:
-                return line
+        if 2 <= len(words) <= 4:
+            alpha = sum(c.isalpha() or c.isspace() or c == '-' for c in line)
+            if alpha / len(line) > 0.85:
+                # Title case it cleanly
+                return ' '.join(w.capitalize() for w in words)
+
     return None
