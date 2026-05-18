@@ -73,6 +73,8 @@ def score_technical(
     resume_text: str,
     required_skills: List[Dict],
     skill_importance: Dict[str, str],
+    custom_aliases: Dict[str, List[str]] = None,
+    custom_equivalents: Dict[str, List[str]] = None,
 ) -> Dict:
     haystack = (resume_text or "").lower()
     must_have, good_to_have, bonus = [], [], []
@@ -91,6 +93,8 @@ def score_technical(
     )
 
     found, partial, missing = [], [], []
+    found_via_alias: List[str] = []
+    partial_via_equiv: List[str] = []
     max_presence = earned_presence = 0.0
     total_depth = depth_count = 0.0
 
@@ -98,21 +102,53 @@ def score_technical(
         weight = IMPORTANCE_WEIGHTS[importance]
         max_presence += weight
 
-        if _skill_present(haystack, name):
+        # Check exact match or taxonomy alias
+        skill_found = _skill_present(haystack, name)
+
+        # Check custom aliases (100% credit)
+        alias_match = None
+        if not skill_found and custom_aliases and name in custom_aliases:
+            for alias in custom_aliases[name]:
+                if _contains(haystack, alias.lower()):
+                    skill_found = True
+                    alias_match = alias
+                    break
+
+        if skill_found:
             found.append(name)
+            if alias_match:
+                found_via_alias.append(f"{alias_match} (alias for {name})")
             earned_presence += weight
             depth = _depth_score_for_skill(haystack, name)
             total_depth += depth
             depth_count += 1
         else:
-            credit = _equivalent_credit(haystack, name)
-            if credit > 0:
+            # Check custom equivalents (90% credit)
+            custom_equiv_credit = 0.0
+            custom_equiv_match = None
+            if custom_equivalents and name in custom_equivalents:
+                for equiv in custom_equivalents[name]:
+                    if _contains(haystack, equiv.lower()):
+                        custom_equiv_credit = 0.90
+                        custom_equiv_match = equiv
+                        break
+
+            if custom_equiv_credit > 0:
                 partial.append(name)
-                earned_presence += weight * credit
+                partial_via_equiv.append(f"{custom_equiv_match} (similar to {name})")
+                earned_presence += weight * custom_equiv_credit
                 total_depth += _depth_score_for_skill(haystack, name) * 0.5
                 depth_count += 0.5
             else:
-                missing.append(name)
+                # Fall back to taxonomy equivalents (45% credit)
+                credit = _equivalent_credit(haystack, name)
+                if credit > 0:
+                    partial.append(name)
+                    earned_presence += weight * credit
+                    total_depth += _depth_score_for_skill(haystack, name) * 0.5
+                    depth_count += 0.5
+                else:
+                    missing.append(name)
 
     presence_score = (earned_presence / max_presence * 100) if max_presence > 0 else 0
 

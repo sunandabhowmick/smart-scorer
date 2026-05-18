@@ -29,6 +29,16 @@ export const api = {
     return res.data.jobs
   },
 
+  async suggestAliases(skill: string) {
+    const token = await getToken()
+    const res = await axios.post(
+      `${API_URL}/api/v1/jobs/suggest-aliases`,
+      { skill },
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    return res.data
+  },
+
   async extractSkills(jdText: string) {
     const token = await getToken()
     const res = await axios.post(

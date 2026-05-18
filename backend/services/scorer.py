@@ -71,7 +71,13 @@ async def score_resume(
     exp_max = int(job.get("experience_max") or 0)
     edu_req = job.get("education_required", "")
 
-    tech_result  = score_technical(resume_text, required_skills, skill_importance)
+    custom_aliases    = job.get("skill_aliases", {}) or {}
+    custom_equivalents = job.get("skill_equivalents", {}) or {}
+    tech_result  = score_technical(
+        resume_text, required_skills, skill_importance,
+        custom_aliases=custom_aliases,
+        custom_equivalents=custom_equivalents,
+    )
     exp_result   = score_experience(resume_text, exp_min, exp_max)
     edu_result   = score_education(resume_text, edu_req)
     stab_result  = score_stability(resume_text)

@@ -119,3 +119,20 @@ async def extract_skills_endpoint(
         return {"skills": []}
     skills = await extract_skills_from_jd(body.description)
     return {"skills": skills}
+
+
+class SuggestAliasesRequest(BaseModel):
+    skill: str = ""
+
+@router.post("/suggest-aliases")
+async def suggest_aliases_endpoint(
+    body: SuggestAliasesRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Suggest aliases and equivalents for a skill using AI."""
+    _get_user(authorization)
+    from services.ai.alias_suggester import suggest_aliases
+    if not body.skill or len(body.skill.strip()) < 2:
+        return {"aliases": [], "equivalents": []}
+    result = await suggest_aliases(body.skill)
+    return result

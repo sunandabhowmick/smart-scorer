@@ -34,14 +34,15 @@ def _extract_phone(text: str) -> Optional[str]:
 
 
 def _extract_name(text: str) -> Optional[str]:
-    # Words that should never appear in a candidate name
     NOISE_WORDS = [
         'resume', 'cv', 'curriculum', 'vitae', 'profile', 'summary',
         'objective', 'experience', 'education', 'skills', 'linkedin',
         'github', 'portfolio', 'contact', 'address', 'phone', 'email',
         'mobile', 'http', 'www', 'engineer', 'developer', 'manager',
         'analyst', 'designer', 'consultant', 'specialist', 'lead',
-        'senior', 'junior', 'intern', 'fresher', 'candidate',
+        'senior', 'junior', 'intern', 'fresher', 'candidate', 'page',
+        'power', 'python', 'java', 'react', 'angular', 'tableau',
+        'microsoft', 'google', 'amazon', 'oracle', 'salesforce',
     ]
 
     for line in text.strip().splitlines()[:10]:
@@ -49,7 +50,7 @@ def _extract_name(text: str) -> Optional[str]:
         if not line or len(line) > 60:
             continue
 
-        # Remove common suffixes that appear on name lines
+        # Strip LinkedIn, GitHub, URLs from line
         line = re.sub(r'\s*[\|•·]\s*linkedin.*$', '', line, flags=re.IGNORECASE)
         line = re.sub(r'\s*[\|•·]\s*github.*$', '', line, flags=re.IGNORECASE)
         line = re.sub(r'\s*[\|•·]\s*http.*$', '', line, flags=re.IGNORECASE)
@@ -61,21 +62,30 @@ def _extract_name(text: str) -> Optional[str]:
         if not line or len(line) > 50:
             continue
 
-        # Skip lines with email, phone, digits
+        # Skip if contains email, phone, or long digit sequences
         if '@' in line or re.search(r'\d{4,}', line):
             continue
 
-        # Skip lines with noise words
+        # Names never contain commas or end with a period
+        if ',' in line or line.endswith('.') or line.endswith(','):
+            continue
+
+        # Skip noise words
         lower = line.lower()
         if any(w in lower for w in NOISE_WORDS):
             continue
 
-        # Must look like a name: 2-4 words, mostly alphabetic
+        # Only allow letters, spaces, hyphens
+        if re.search(r'[^a-zA-Z\s\-]', line):
+            continue
+
+        # Must be 2-4 words
         words = line.split()
-        if 2 <= len(words) <= 4:
-            alpha = sum(c.isalpha() or c.isspace() or c == '-' for c in line)
-            if alpha / len(line) > 0.85:
-                # Title case it cleanly
-                return ' '.join(w.capitalize() for w in words)
+        if not (2 <= len(words) <= 4):
+            continue
+
+        # Every word must be purely alphabetic (hyphens allowed)
+        if all(w.replace('-', '').isalpha() and len(w) >= 2 for w in words):
+            return ' '.join(w.capitalize() for w in words)
 
     return None

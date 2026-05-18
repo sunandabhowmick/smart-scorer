@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { api } from '@/lib/api'
 import Navbar from '@/components/Navbar'
+import AliasPanel from '@/components/AliasPanel'
 
 export default function EditJobPage() {
   const router = useRouter()
@@ -15,6 +16,9 @@ export default function EditJobPage() {
   const [existingScoreCount, setExistingScoreCount] = useState(0)
   const [showReScorePrompt,  setShowReScorePrompt]  = useState(false)
   const [skillInput, setSkillInput] = useState('')
+  const [showAlias, setShowAlias] = useState<string | null>(null)
+  const [skillAliases, setSkillAliases] = useState<Record<string, string[]>>({})
+  const [skillEquivalents, setSkillEquivalents] = useState<Record<string, string[]>>({})
 
   const [form, setForm] = useState({
     title:               '',
@@ -26,6 +30,8 @@ export default function EditJobPage() {
     required_skills:     [] as { skill: string; importance: string }[],
     nice_to_have_skills: [] as string[],
     skill_importance:    {} as Record<string, string>,
+    skill_aliases:       {} as Record<string, string[]>,
+    skill_equivalents:   {} as Record<string, string[]>,
   })
 
   const currentVersion = parseInt(form.title.match(/\(v(\d+)\)$/)?.[1] || '1')
@@ -48,7 +54,11 @@ export default function EditJobPage() {
           required_skills:     job.required_skills || [],
           nice_to_have_skills: job.nice_to_have_skills || [],
           skill_importance:    job.skill_importance || {},
+          skill_aliases:       job.skill_aliases || {},
+          skill_equivalents:   job.skill_equivalents || {},
         })
+        if (job.skill_aliases) setSkillAliases(job.skill_aliases)
+        if (job.skill_equivalents) setSkillEquivalents(job.skill_equivalents)
 
         const results = await api.getResults(jobId)
         setExistingScoreCount(results.length)
@@ -69,6 +79,17 @@ export default function EditJobPage() {
       skill_importance: { ...f.skill_importance, [skill]: 'must' },
     }))
     setSkillInput('')
+  }
+
+  const handleAliasSave = (skill: string, aliases: string[], equivalents: string[]) => {
+    setSkillAliases(prev => ({ ...prev, [skill]: aliases }))
+    setSkillEquivalents(prev => ({ ...prev, [skill]: equivalents }))
+    setShowAlias(null)
+    setForm(f => ({
+      ...f,
+      skill_aliases:     { ...(f as any).skill_aliases,     [skill]: aliases },
+      skill_equivalents: { ...(f as any).skill_equivalents, [skill]: equivalents },
+    }))
   }
 
   const removeSkill = (skill: string) => {
@@ -267,24 +288,59 @@ export default function EditJobPage() {
             {form.required_skills.length > 0 && (
               <div className="space-y-2">
                 {form.required_skills.map(({ skill, importance }) => (
-                  <div key={skill} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2">
-                    <span className="flex-1 text-sm font-medium text-gray-800">{skill}</span>
-                    <div className="flex gap-1">
-                      {(['must', 'good', 'bonus'] as const).map(opt => (
-                        <button key={opt} onClick={() => setImportance(skill, opt)}
-                          className={`px-2.5 py-1 rounded text-xs font-semibold transition ${
-                            importance === opt
-                              ? opt === 'must'  ? 'bg-red-100 text-red-700'
-                              : opt === 'good'  ? 'bg-yellow-100 text-yellow-700'
-                              : 'bg-green-100 text-green-700'
-                              : 'bg-white border border-gray-200 text-gray-400 hover:bg-gray-100'
-                          }`}>
-                          {opt === 'must' ? 'Must Have' : opt === 'good' ? 'Good to Have' : 'Bonus'}
-                        </button>
-                      ))}
+                  <div key={skill} className="space-y-1">
+                    <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2">
+                      <span className="flex-1 text-sm font-medium text-gray-800">{skill}</span>
+                      <div className="flex gap-1">
+                        {(['must', 'good', 'bonus'] as const).map(opt => (
+                          <button key={opt} onClick={() => setImportance(skill, opt)}
+                            className={`px-2.5 py-1 rounded text-xs font-semibold transition ${
+                              importance === opt
+                                ? opt === 'must'  ? 'bg-red-100 text-red-700'
+                                : opt === 'good'  ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-green-100 text-green-700'
+                                : 'bg-white border border-gray-200 text-gray-400 hover:bg-gray-100'
+                            }`}>
+                            {opt === 'must' ? 'Must Have' : opt === 'good' ? 'Good to Have' : 'Bonus'}
+                          </button>
+                        ))}
+                      </div>
+                      <button onClick={() => removeSkill(skill)}
+                        className="text-red-400 hover:text-red-600 text-xs font-bold">✕</button>
                     </div>
-                    <button onClick={() => removeSkill(skill)}
-                      className="text-red-400 hover:text-red-600 text-xs font-bold">✕</button>
+                    {showAlias === skill && (
+                      <AliasPanel
+                        skill={skill}
+                        existingAliases={skillAliases[skill] || []}
+                        existingEquivalents={skillEquivalents[skill] || []}
+                        onSave={(aliases, equivalents) => handleAliasSave(skill, aliases, equivalents)}
+                        onDismiss={() => setShowAlias(null)}
+                      />
+                    )}
+                    {showAlias !== skill && (skillAliases[skill]?.length > 0 || skillEquivalents[skill]?.length > 0) && (
+                      <div className="flex items-center gap-2 px-1 flex-wrap">
+                        {skillAliases[skill]?.map(a => (
+                          <span key={a} className="text-[10px] bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 rounded-full">
+                            {a}
+                          </span>
+                        ))}
+                        {skillEquivalents[skill]?.map(e => (
+                          <span key={e} className="text-[10px] bg-purple-50 text-purple-600 border border-purple-100 px-2 py-0.5 rounded-full">
+                            ~{e}
+                          </span>
+                        ))}
+                        <button onClick={() => setShowAlias(skill)}
+                          className="text-[10px] text-blue-500 hover:text-blue-700 underline">
+                          edit
+                        </button>
+                      </div>
+                    )}
+                    {showAlias !== skill && !skillAliases[skill]?.length && !skillEquivalents[skill]?.length && (
+                      <button onClick={() => setShowAlias(skill)}
+                        className="text-[10px] text-blue-400 hover:text-blue-600 px-1">
+                        + suggest aliases
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

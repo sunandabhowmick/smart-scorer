@@ -122,15 +122,21 @@ def build_final_scores(
 
 
 def _build_tech_reasoning(rule_tech: Dict, ai_reasoning: Dict) -> str:
-    found   = rule_tech.get("found", [])
-    partial = rule_tech.get("partial", [])
-    missing = rule_tech.get("missing", [])
-    parts   = []
+    found            = rule_tech.get("found", [])
+    partial          = rule_tech.get("partial", [])
+    missing          = rule_tech.get("missing", [])
+    found_via_alias  = rule_tech.get("found_via_alias", [])
+    partial_via_equiv= rule_tech.get("partial_via_equiv", [])
+    parts            = []
 
     if found:
         parts.append(f"{', '.join(found)} found in resume.")
-    if partial:
-        parts.append(f"Related skills (partial match): {', '.join(partial)}.")
+    if found_via_alias:
+        parts.append(f"Also matched via alias: {', '.join(found_via_alias)}.")
+    if partial_via_equiv:
+        parts.append(f"Similar skills found (90% credit): {', '.join(partial_via_equiv)}.")
+    if partial and not partial_via_equiv:
+        parts.append(f"Related skills found (partial match): {', '.join(partial)}.")
     if missing:
         parts.append(
             f"{', '.join(missing)} were not found in this resume. "
