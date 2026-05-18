@@ -33,7 +33,15 @@ def _contains(haystack: str, needle: str) -> bool:
 
 
 def _skill_present(haystack: str, skill: str) -> bool:
-    return any(_contains(haystack, a) for a in _aliases_for(skill))
+    if any(_contains(haystack, a) for a in _aliases_for(skill)):
+        return True
+    import re as _re
+    parts = _re.split(r'\s*[&/]\s*|\s+and\s+', skill, flags=_re.IGNORECASE)
+    if len(parts) > 1:
+        cleaned = [p.strip() for p in parts if p.strip()]
+        if all(_contains(haystack, p.lower()) for p in cleaned):
+            return True
+    return False
 
 
 def _equivalent_credit(haystack: str, skill: str) -> float:
