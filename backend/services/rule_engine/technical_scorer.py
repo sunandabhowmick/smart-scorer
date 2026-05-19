@@ -33,6 +33,8 @@ def _contains(haystack: str, needle: str) -> bool:
 
 
 def _skill_present(haystack: str, skill: str) -> bool:
+    if any(_contains(haystack, a) for a in _aliases_for(skill)):
+        return True
     # First try exact match or alias
     if any(_contains(haystack, a) for a in _aliases_for(skill)):
         return True
@@ -174,6 +176,7 @@ def score_technical(
     raw = presence_score * PRESENCE_WEIGHT + depth_score * DEPTH_WEIGHT
     score = max(0, min(100, int(round(raw))))
     must_have_missing = sum(1 for n in must_have if n in missing)
+    total_must_have   = len(must_have)
 
     return {
         "score":             score,
@@ -181,6 +184,7 @@ def score_technical(
         "partial":           partial,
         "missing":           missing,
         "must_have_missing": must_have_missing,
+        "total_must_have":   total_must_have,
         "presence_score":    int(round(presence_score)),
         "depth_score":       int(round(depth_score)),
     }
