@@ -127,29 +127,45 @@ def _build_tech_reasoning(rule_tech: Dict, ai_reasoning: Dict) -> str:
     missing          = rule_tech.get("missing", [])
     found_via_alias  = rule_tech.get("found_via_alias", [])
     partial_via_equiv= rule_tech.get("partial_via_equiv", [])
-    parts            = []
 
-    if found:
-        parts.append(f"{', '.join(found)} found in resume.")
-    if found_via_alias:
-        parts.append(f"Also matched via alias: {', '.join(found_via_alias)}.")
-    if partial_via_equiv:
-        parts.append(f"Similar skills found (90% credit): {', '.join(partial_via_equiv)}.")
-    if partial and not partial_via_equiv:
-        parts.append(f"Related skills found (partial match): {', '.join(partial)}.")
-    if missing:
-        parts.append(
-            f"{', '.join(missing)} were not found in this resume. "
-            f"Technical score has been adjusted to reflect the missing required skills."
-        )
+    # Use AI reasoning as the primary text if available
+    # AI already knows what was found/missing from the prompt
     ai_tech = ai_reasoning.get("technical", "")
     if ai_tech:
         clean = ai_tech
-        for bad in ["ceiling", "capped", "Python override", "deterministic"]:
+        for bad in ["ceiling rule", "capped at", "Python override",
+                    "deterministic", "ceiling applied"]:
             clean = clean.replace(bad, "")
-        if clean.strip():
-            parts.append(clean.strip())
+        clean = clean.strip()
+        if clean:
+            # Append alias/equivalent info if AI did not mention it
+            suffix = []
+            if found_via_alias:
+                suffix.append(
+                    f"Matched via alias: {', '.join(found_via_alias)}."
+                )
+            if partial_via_equiv:
+                suffix.append(
+                    f"Similar skills credited: {', '.join(partial_via_equiv)}."
+                )
+            if suffix:
+                return clean + " " + " ".join(suffix)
+            return clean
 
+    # Fallback to rule-based text only if AI gave nothing
+    parts = []
+    if found:
+        parts.append(f"{', '.join(found)} found in resume.")
+    if found_via_alias:
+        parts.append(f"Matched via alias: {', '.join(found_via_alias)}.")
+    if partial_via_equiv:
+        parts.append(f"Similar skills credited: {', '.join(partial_via_equiv)}.")
+    if partial and not partial_via_equiv:
+        parts.append(f"Related skills found: {', '.join(partial)}.")
+    if missing:
+        parts.append(
+            f"{', '.join(missing)} not found in this resume."
+        )
     return " ".join(parts) if parts else "Technical skills evaluated."
 
 

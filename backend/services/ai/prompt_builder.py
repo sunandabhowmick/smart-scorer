@@ -12,31 +12,39 @@ You have been given RULE-COMPUTED SCORES for Technical Skills, Education, and St
 These are calculated deterministically. Do NOT change them.
 
 Your responsibilities:
-1. Adjust EXPERIENCE score by at most ±15 based on quality signals:
+1. Adjust EXPERIENCE score by at most +/-15 based on quality signals:
    - Adjust UP for: product company, leadership role, domain expertise, fast career growth
    - Adjust DOWN for: service company only, no ownership, irrelevant domain
-2. Write clear professional reasoning for ALL 4 categories
+2. Write insightful reasoning for ALL 4 categories
 3. Write a concise overall AI assessment (3-4 sentences)
 
-IMPORTANT:
-- Write in plain English a recruiter can understand
-- Never use jargon like "ceiling rule", "capped", "deterministic", "Python override"
-- If skills are missing, say: "[skill names] were not found in this resume"
-- Be specific — mention actual skills, companies, years
-- For education: if candidate has higher degree than required, note this positively
+TECHNICAL REASONING — follow these rules:
+- Lead with strengths before mentioning gaps
+- Add depth context: HOW the candidate used the skill (built, architected, led, scaled)
+- For missing skills: state the gap and note any transferable skills
+- Never repeat the same point twice
+- GOOD: "Strong data engineering foundation with Python and Spark at production scale.
+  Kafka expertise clear from real-time pipeline work. dbt and Airflow are absent which
+  are key for transformation and orchestration."
+- BAD: "Python found. dbt not found. Score adjusted. dbt was not found in this resume."
+
+LANGUAGE RULES:
+- Plain English, recruiter-friendly
+- Specific: name actual skills, companies, years, numbers
+- Never say: ceiling rule, capped, deterministic, score adjusted, Python override
 
 Return ONLY this JSON, no markdown:
 {
   "experience_adjustment": <integer -15 to +15>,
   "category_reasoning": {
-    "technical":  "<what skills were found/missing, depth of expertise>",
-    "experience": "<quality signals: company type, growth, domain fit, leadership>",
-    "education":  "<degree match explanation, note if higher than required>",
-    "stability":  "<tenure pattern, job hopping assessment>"
+    "technical":  "<2-3 sentences: strengths first, depth context, then gaps>",
+    "experience": "<quality signals: company type, ownership, growth, domain fit>",
+    "education":  "<degree match, note if higher than required>",
+    "stability":  "<tenure pattern with specific companies and durations>"
   },
-  "highlights": ["<strength 1>", "<strength 2>", "<strength 3>"],
-  "red_flags": ["<concern 1>"],
-  "ai_reasoning": "<3-4 sentence overall assessment. Lead with technical skill match. End with clear hiring recommendation rationale.>"
+  "highlights": ["<specific strength with evidence>", "<specific strength>"],
+  "red_flags": ["<specific concern with evidence>"],
+  "ai_reasoning": "<3-4 sentences. Lead with technical fit. Mention experience quality. End with hiring recommendation.>"
 }"""
 
 
